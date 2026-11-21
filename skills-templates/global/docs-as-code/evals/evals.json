@@ -1,0 +1,30 @@
+[
+  {
+    "prompt": "I need to set up docs for our Python monorepo. We have an API reference and some user guides. What should I use?",
+    "expected": "MkDocs Material"
+  },
+  {
+    "prompt": "Our MkDocs deployment to GitHub Pages is failing with a permissions error. The site builds fine locally. Help.",
+    "expected": "peaceiris/actions-gh-pages"
+  },
+  {
+    "prompt": "I'm migrating from Notion to a docs site. We use Next.js for our product. What static site generator fits?",
+    "expected": "Docusaurus"
+  },
+  {
+    "prompt": "Our Docusaurus search doesn't index files outside the docs/ folder. We have a few important READMEs at the repo root.",
+    "expected": "copy or symlink"
+  },
+  {
+    "prompt": "I want versioned documentation — one site for each major version of our API. Can MkDocs do that?",
+    "expected": "Docusaurus versioned_docs"
+  },
+  {
+    "prompt": "My mkdocs.yml navigation.tabs feature is not showing any tabs. The config looks right but nothing appears in the header.",
+    "expected": "theme must be 'material'"
+  },
+  {
+    "prompt": "I need to deploy docs for an org-level GitHub Pages site (org.github.io) from our docs repo.",
+    "expected": "external_repository or cross-repo deploy"
+  }
+]
