@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "My ~/.pi/agent/APPEND_SYSTEM.md has 150 lines: God File Rule, Mermaid rendering, 10 design layout golden rules with layout hierarchy, and a full database schema overview (9 schemas, 30+ tables, migration commands). Which sections should stay and which should move? Where should they go?",
+    "expected": "God File Rule and Mermaid are universal — keep. Design layout rules move to workspace SYSTEM.md or a UI skill. DB schema moves to the API/backend package's AGENTS.md or SYSTEM.md."
+  },
+  {
+    "prompt": "I have apps/AGENTS.md at 250 lines: design system golden rules, 20+ import paths, token contracts (typography, color, border, spacing), layout hierarchy (Container > Stack > Grid > Card), interactive state table, composition selection guide (CardGroup vs ItemGroup), all 10 DON'Ts, AML commands, Git workflow, and a boundaries table. Which sections should stay in AGENTS.md and which belong somewhere deeper?",
+    "expected": "Keep in AGENTS.md: directory map, pointer to SYSTEM.md, boundaries table, Git workflow. Move to SYSTEM.md: import paths, token contracts, golden rules, layout hierarchy, interactive states, composition selection. Possibly move to skill: step-by-step building workflow."
+  },
+  {
+    "prompt": "The same '10 golden rules' exist in three places: ~/.pi/agent/APPEND_SYSTEM.md, ~/project/AGENTS.md, and ~/project/apps/.pi/SYSTEM.md. How do I deduplicate?",
+    "expected": "Keep only in the deepest layer: SYSTEM.md (or a skill). Remove from global APPEND and root AGENTS. Add pointer lines: 'See apps/.pi/SYSTEM.md for design system rules.'"
+  },
+  {
+    "prompt": "I'm onboarding onto a monorepo and finding Pi context files everywhere. How do I measure whether they're healthy or bloated? What line-count targets should I aim for?",
+    "expected": "Global APPEND ≤30 lines. Root AGENTS 30-60 lines. Subtree AGENTS 40-80 lines. Workspace SYSTEM unlimited. Open each file, classify content by layer fit, check for duplicate rules across files, check for content that should be a skill."
+  }
+]

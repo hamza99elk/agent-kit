@@ -1,0 +1,49 @@
+[
+  {
+    "id": "fullstack-scaffold",
+    "name": "Scaffold a full-stack todo app",
+    "prompt": "Build me a full-stack todo application with Express backend and React frontend. Use SQLite for the database, REST API, JWT auth, and feature-first structure.",
+    "expected_behaviors": [
+      "Feature-first directory structure (not layer-first)",
+      "Three-layer architecture (controller → service → repository)",
+      "Centralized typed config with startup validation",
+      "Typed error hierarchy with global error handler",
+      "JWT auth middleware with short expiry access token",
+      "Structured JSON logging with request ID",
+      "Input validation on all endpoints (Zod)",
+      "Health check endpoints (/health, /ready)",
+      "API client with token auto-attach on frontend",
+      "Build check passes before completion",
+      "CORS with explicit origins"
+    ]
+  },
+  {
+    "id": "auth-implementation",
+    "name": "Add auth to existing API",
+    "prompt": "Add JWT authentication to my Express API. I need login, register, and a protected route. Use typed errors and middleware for auth. The frontend is React with React Query.",
+    "expected_behaviors": [
+      "Auth middleware in standard middleware order position",
+      "JWT with short expiry (15min) + refresh token",
+      "Typed error classes (UnauthorizedError, etc.)",
+      "httpOnly cookie for refresh token, not localStorage on frontend",
+      "Transparent token refresh on 401 in API client",
+      "RBAC middleware if roles mentioned",
+      "User-facing error messages (not raw API errors)"
+    ]
+  },
+  {
+    "id": "error-handling-pattern",
+    "name": "Add proper error handling",
+    "prompt": "Set up error handling for my Express API. I need typed error classes, a global error handler, and proper error responses. Also map errors on the React frontend to user-friendly messages.",
+    "expected_behaviors": [
+      "Typed error hierarchy (AppError base + NotFoundError, ValidationError, etc.)",
+      "Global error handler middleware as last middleware",
+      "Operational errors get structured JSON response with code, status, detail",
+      "Programming errors get logged with stack trace + generic 500 response",
+      "Never return stack traces to client",
+      "Frontend error mapper with human-readable messages per status code",
+      "401 → 'Please log in', 403 → permission, 404 → not found, etc.",
+      "Network error (TypeError 'Failed to fetch') → connection message"
+    ]
+  }
+]

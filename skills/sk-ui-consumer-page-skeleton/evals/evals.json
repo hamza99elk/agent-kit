@@ -1,0 +1,40 @@
+[
+  {
+    "prompt": "Define a page skeleton for a new 'audit' route at apps/platform/app/(app)/audit/. The page needs a sidebar with a list of audit runs, a main content area for the selected run details, and an inspector panel for metadata. This is a three-zone layout.",
+    "expected_outputs": [
+      "Uses Explorer archetype from @analygo/ui",
+      "Directory structure: audit/page.tsx, AuditView.tsx, components/, hooks/",
+      "page.tsx is server component with Suspense only, 20 lines max",
+      "AuditView.tsx is client component with Container → Stack → Explorer composition",
+      "No hand-rolled chrome or layout divs",
+      "Error/loading/empty states handled at View level",
+      "Feature sections imported from ./components receive typed props"
+    ],
+    "inputs": null
+  },
+  {
+    "prompt": "Define a page skeleton for a new 'billing' settings-style route at apps/platform/app/(app)/billing/. This is a simple single-column page with a heading, tabs, and card-based content sections.",
+    "expected_outputs": [
+      "No archetype needed — manual Container → Stack → Card composition",
+      "Directory structure: billing/page.tsx, BillingView.tsx, components/, hooks/",
+      "page.tsx is server component with Suspense and Skeleton fallback",
+      "BillingView.tsx composes Container → Stack → Tabs → Stack → Card layout",
+      "Uses Heading, Tabs variant='line', Card with CardHeader and CardContent",
+      "No flex flex-col or space-y-* — uses Stack gap",
+      "No h2 with font-semibold — uses Heading level='h2'"
+    ],
+    "inputs": null
+  },
+  {
+    "prompt": "I need a page skeleton for viewing a single contract in apps/platform/app/(app)/contracts/[contractId]/. It needs breadcrumbs, a heading, action buttons, metadata grid, tabs for different sections, and a main content area.",
+    "expected_outputs": [
+      "Uses Detail archetype from @analygo/ui",
+      "Directory: contracts/[contractId]/page.tsx, ContractDetailView.tsx, components/, hooks/",
+      "page.tsx is server component, 20 lines max",
+      "Detail archetype provides breadcrumbs + heading + actions + metadata grid + tabs + content",
+      "Each tab content uses Container → Stack → Card composition",
+      "No hand-rolled layout primitives"
+    ],
+    "inputs": null
+  }
+]
