@@ -12,67 +12,51 @@
 #   bash scripts/sprout-skills.sh --apply    # write symlinks
 #   bash scripts/sprout-skills.sh --prune    # remove broken links only
 #
-# Can also be run from chezmoi's run_onchange_after_* hook to keep
-# the two clusters in sync after `chezmoi apply`.
+# Can also be called by the chezmoi run_onchange_after_* hook.
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="${1:---dry-run}"
 
-# ── Map: source subtree → target workspace root → relative symlink prefix ──
-# Each entry: source dir glob relative to skills-templates/
-#               target root where .pi/skills/ lives
-#               symlink depth (how many dirs deep the skill dir is)
-declare -a WORKSPACES=(
-  # analygo packages
-  "analygo/hatchet|$HOME/Projects/analygo/packages/hatchet|3"
-  "analygo/ui|$HOME/Projects/analygo/packages/ui|3"
-  "analygo/contracts|$HOME/Projects/analygo/packages/contracts|3"
-  "analygo/aegis|$HOME/Projects/analygo/packages/aegis|3"
-  "analygo/apps|$HOME/Projects/analygo/apps|3"
-  "analygo/root|$HOME/Projects/analygo|2"
-  # hamza-workspace areas
-  "hamza-workspace/root|$HOME/hamza-workspace|2"
-  "hamza-workspace/strategy|$HOME/hamza-workspace/strategy|2"
-  "hamza-workspace/finance|$HOME/hamza-workspace/finance|2"
-)
+SKILLS_DIR="$REPO_ROOT/skills-templates"
 
-ANALOGO_AGENTS_FILE="$HOME/Projects/analygo/.pi/AGENTS.md"
-HAMZA_AGENTS_FILE="$HOME/hamza-workspace/.pi/AGENTS.md"
+# ── Workspace Map ────────────────────────────────────────────────────────
+# Each entry: source_subdir|target_root
+#   source_subdir is relative to skills-templates/
+#   target_root is the workspace dir whose .pi/skills/ gets populated
+WORKSPACES=(
+  "analygo/hatchet|$HOME/Projects/analygo/packages/hatchet"
+  "analygo/ui|$HOME/Projects/analygo/packages/ui"
+  "analygo/contracts|$HOME/Projects/analygo/packages/contracts"
+  "analygo/aegis|$HOME/Projects/analygo/packages/aegis"
+  "analygo/apps|$HOME/Projects/analygo/apps"
+  "analygo/root|$HOME/Projects/analygo"
+  "hamza-workspace/root|$HOME/hamza-workspace"
+  "hamza-workspace/strategy|$HOME/hamza-workspace/strategy"
+  "hamza-workspace/finance|$HOME/hamza-workspace/finance"
+)
 
 log()  { printf "  %s\n" "$*"; }
 title(){ printf "\n=== %s ===\n\n" "$*"; }
 
-# ── Helpers ──
 make_relative_symlink() {
-  local target="$1"   # absolute path to source dir
-  local link="$2"     # absolute path to symlink to create
-  local depth="$3"    # how many dirs deep to strip from target
-
+  local target="$1" link="$2"
   mkdir -p "$(dirname "$link")"
-
-  # Compute relative path from link's parent to target
-  local link_dir
+  local link_dir relative
   link_dir="$(dirname "$link")"
-  local relative
-  relative="$(realpath --relative-to="$link_dir" "$target" 2>/dev/null || echo "")"
-  if [ -z "$relative" ]; then
-    # macOS realpath doesn't support --relative-to, fall back to full path
-    relative="$target"
-  fi
+  # Use absolute paths to avoid macOS realpath limitations
+  relative="$target"
 
   if [ "$MODE" = "--apply" ]; then
     if [ -L "$link" ] || [ -e "$link" ]; then
       local existing
       existing="$(readlink "$link")"
-      if [ "$existing" = "$relative" ] || [ "$existing" = "$target" ]; then
-        return 0  # already correct
-      fi
+      [ "$existing" = "$relative" ] || [ "$existing" = "${relative%/}" ] && return 0
       rm -f "$link"
     fi
     ln -s "$relative" "$link"
-    log "  ✓ $link → $relative"
+    log "  ✓ $link"
   else
     log "  ~ $link → $relative"
   fi
@@ -80,105 +64,84 @@ make_relative_symlink() {
 
 prune_broken() {
   local dir="$1"
-  if [ ! -d "$dir" ]; then
-    return 0
-  fi
+  [ -d "$dir" ] || return 0
   local count=0
   while IFS= read -r -d '' link; do
     if [ -L "$link" ] && [ ! -e "$link" ]; then
       rm "$link"
-      log "  ✗ removed broken: $link"
       count=$((count + 1))
     fi
   done < <(find "$dir" -type l -print0)
-  if [ "$count" -gt 0 ]; then
-    log "  (removed $count broken symlinks)"
-  fi
-  # Remove empty dirs
+  [ "$count" -gt 0 ] && log "  (removed $count broken symlinks)"
   find "$dir" -type d -empty -delete 2>/dev/null || true
 }
 
-# ── Main ──
-if [ "$MODE" = "--prune" ]; then
-  title "Pruning broken symlinks"
-  for entry in "${WORKSPACES[@]}"; do
-    target_root="${entry#*|}"
-    target_root="${target_root%%|*}"
-    prune_broken "$target_root/.pi/skills"
-  done
-  exit 0
-fi
+fanout_workspace() {
+  local source_sub="$1" target_root="$2"
+  local source_dir="$SKILLS_DIR/$source_sub"
 
-if [ "$MODE" != "--apply" ]; then
-  title "DRY-RUN: sprout-skills.sh (pass --apply to execute)"
-fi
-
-created=0
-for entry in "${WORKSPACES[@]}"; do
-  source_sub="${entry%%|*}"
-  target_root="${entry#*|}"
-  target_root="${target_root%%|*}"
-  depth="${entry##*|}"
-  source_dir="$REPO_ROOT/skills-templates/$source_sub"
-
-  if [ ! -d "$source_dir" ]; then
-    log "  (no source dir: $source_dir — skipping)"
-    continue
-  fi
+  [ -d "$source_dir" ] || { log "  (no source dir: $source_sub)"; return 0; }
 
   title "$source_sub → $target_root/.pi/skills/"
 
-  # Walk skill directories at the configured depth
-  # e.g. depth=2 for hatchet: skills-templates/analygo/hatchet/sk-hatchet-foo/
-  #      depth=1 for root:    skills-templates/analygo/root/sk-analygo-pnpm/
-  local depth_arg="$depth"
-  find "$source_dir" -mindepth 1 -maxdepth "$depth" -type d | while read -r skill_dir; do
-    # Only create symlinks for dirs with SKILL.md
-    if [ ! -f "$skill_dir/SKILL.md" ]; then
-      continue
-    fi
-
+  local count=0
+  while IFS= read -r -d '' skill_dir; do
+    local skill_name
     skill_name="$(basename "$skill_dir")"
-    link_path="$target_root/.pi/skills/$skill_name"
-    make_relative_symlink "$skill_dir" "$link_path" "$depth"
-    created=$((created + 1))
-  done
+    local link_path="$target_root/.pi/skills/$skill_name"
+    make_relative_symlink "$skill_dir" "$link_path"
+    count=$((count + 1))
+  done < <(find "$source_dir" -mindepth 1 -maxdepth 1 -type d -print0)
+
+  [ "$count" -eq 0 ] && log "  (no skill dirs found)"
+  return 0
+}
+
+ensure_global_link() {
+  local global_source="$SKILLS_DIR/global"
+  local global_link="$HOME/.pi/agent/skills"
+
+  title "Global skills"
+  if [ -L "$global_link" ] && [ "$(readlink "$global_link")" = "$global_source" ]; then
+    log "  ✓ already linked"
+    return 0
+  fi
+  [ -e "$global_link" ] && rm -rf "$global_link"
+  mkdir -p "$(dirname "$global_link")"
+  [ "$MODE" = "--apply" ] && ln -sfn "$global_source" "$global_link" && log "  ✓ linked"
+  [ "$MODE" != "--apply" ] && log "  ~ $global_link → $global_source"
+}
+
+# ── Main ──
+case "$MODE" in
+  --prune)
+    title "Pruning broken symlinks"
+    for entry in "${WORKSPACES[@]}"; do
+      prune_broken "${entry#*|}/.pi/skills"
+    done
+    exit 0
+    ;;
+  --apply) ;;
+  *)
+    title "DRY-RUN (pass --apply to execute)" ;;
+esac
+
+for entry in "${WORKSPACES[@]}"; do
+  IFS='|' read -r source_sub target_root <<< "$entry"
+  fanout_workspace "$source_sub" "$target_root"
 done
 
-# Also link the global skills into ~/.pi/agent/skills (already a dir-level symlink)
-# but ensure the dir-level symlink itself exists
-GLOBAL_SOURCE="$REPO_ROOT/skills-templates/global"
-GLOBAL_LINK="$HOME/.pi/agent/skills"
-if [ ! -L "$GLOBAL_LINK" ] || [ "$(readlink "$GLOBAL_LINK")" != "$GLOBAL_SOURCE" ] && [ "$(readlink "$GLOBAL_LINK")" != "${GLOBAL_SOURCE%/}" ]; then
-  title "Global skills"
-  mkdir -p "$(dirname "$GLOBAL_LINK")"
-  if [ -e "$GLOBAL_LINK" ] && [ ! -L "$GLOBAL_LINK" ]; then
-    rm -rf "$GLOBAL_LINK"
-  fi
-  if [ "$MODE" = "--apply" ]; then
-    ln -sfn "$GLOBAL_SOURCE" "$GLOBAL_LINK"
-    log "  ✓ $GLOBAL_LINK → $GLOBAL_SOURCE"
-  else
-    log "  ~ $GLOBAL_LINK → $GLOBAL_SOURCE"
-  fi
-else
-  title "Global skills"
-  log "  ✓ already linked"
-fi
+ensure_global_link
 
-# ── Prune broken links after creation ──
 if [ "$MODE" = "--apply" ]; then
   title "Pruning broken symlinks"
   for entry in "${WORKSPACES[@]}"; do
-    target_root="${entry#*|}"
-    target_root="${target_root%%|*}"
+    IFS='|' read -r _ target_root _ <<< "$entry"
     prune_broken "$target_root/.pi/skills"
   done
-fi
-
-echo ""
-if [ "$MODE" = "--apply" ]; then
+  echo ""
   echo "Done. Skills fanned out."
 else
+  echo ""
   echo "Dry-run complete. Pass --apply to write symlinks."
 fi
