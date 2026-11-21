@@ -3,16 +3,13 @@
 # Standalone symlink fan-out from agent-kit (Cluster 2) to all workspace
 # .pi/skills/ directories.
 #
-# This is the ONLY bridge between Cluster 2 (agent-kit) and the workspace
-# tree. It is NOT chezmoi-managed. Run it after adding/renaming/deleting
-# a skill in any skills-templates/ subdirectory.
+# The ONLY bridge between Cluster 2 (agent-kit) and the workspace tree.
+# NOT chezmoi-managed. Run after adding/renaming/deleting a skill.
 #
 # Usage:
 #   bash scripts/sprout-skills.sh            # dry-run
 #   bash scripts/sprout-skills.sh --apply    # write symlinks
 #   bash scripts/sprout-skills.sh --prune    # remove broken links only
-#
-# Can also be called by the chezmoi run_onchange_after_* hook.
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -22,9 +19,7 @@ MODE="${1:---dry-run}"
 SKILLS_DIR="$REPO_ROOT/skills-templates"
 
 # ── Workspace Map ────────────────────────────────────────────────────────
-# Each entry: source_subdir|target_root
-#   source_subdir is relative to skills-templates/
-#   target_root is the workspace dir whose .pi/skills/ gets populated
+# source_subdir|target_root
 WORKSPACES=(
   "analygo/hatchet|$HOME/Projects/analygo/packages/hatchet"
   "analygo/ui|$HOME/Projects/analygo/packages/ui"
@@ -40,25 +35,36 @@ WORKSPACES=(
 log()  { printf "  %s\n" "$*"; }
 title(){ printf "\n=== %s ===\n\n" "$*"; }
 
-make_relative_symlink() {
+# Resolve the inner target dir for a skill:
+#   - If skill_dir/<same_name>/ exists, link to <inner> (clean root — no siblings)
+#   - Otherwise link to <skill_dir> directly (flat skills like qa-*, sk-personal-os)
+resolve_skill_target() {
+  local skill_dir="$1"
+  local name
+  name="$(basename "$skill_dir")"
+  local inner="$skill_dir/$name"
+  if [ -d "$inner" ]; then
+    printf "%s" "$inner"
+  else
+    printf "%s" "$skill_dir"
+  fi
+}
+
+make_symlink() {
   local target="$1" link="$2"
   mkdir -p "$(dirname "$link")"
-  local link_dir relative
-  link_dir="$(dirname "$link")"
-  # Use absolute paths to avoid macOS realpath limitations
-  relative="$target"
 
   if [ "$MODE" = "--apply" ]; then
     if [ -L "$link" ] || [ -e "$link" ]; then
       local existing
       existing="$(readlink "$link")"
-      [ "$existing" = "$relative" ] || [ "$existing" = "${relative%/}" ] && return 0
+      [ "$existing" = "$target" ] && return 0
       rm -f "$link"
     fi
-    ln -s "$relative" "$link"
+    ln -s "$target" "$link"
     log "  ✓ $link"
   else
-    log "  ~ $link → $relative"
+    log "  ~ $link → $target"
   fi
 }
 
@@ -86,10 +92,10 @@ fanout_workspace() {
 
   local count=0
   while IFS= read -r -d '' skill_dir; do
-    local skill_name
+    local skill_name target
     skill_name="$(basename "$skill_dir")"
-    local link_path="$target_root/.pi/skills/$skill_name"
-    make_relative_symlink "$skill_dir" "$link_path"
+    target="$(resolve_skill_target "$skill_dir")"
+    make_symlink "$target" "$target_root/.pi/skills/$skill_name"
     count=$((count + 1))
   done < <(find "$source_dir" -mindepth 1 -maxdepth 1 -type d -print0)
 
