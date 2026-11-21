@@ -1,84 +1,79 @@
-# agent-kit
+# agent-kit — AI Harness (Cluster 2)
 
-Canonical source-of-truth for Pi agent context files (AGENTS.md), skill definitions
-(SKILL.md), and system prompt templates (SYSTEM.md). Authored in `agent-kit/`,
-distributed to consumers via **chezmoi-managed symlinks**.
+Canonical source-of-truth for Pi agent context files, skill definitions,
+and system prompt templates. This repo is **independent of chezmoi** —
+symlink fan-out is handled by `scripts/sprout-skills.sh`.
 
 ## Architecture
 
 ```
-agent-kit/                              ← single source of truth
-├── skills-templates/                   ← all skill definitions
-│   ├── global/                         ← → ~/.pi/agent/skills (dir-level chezmoi symlink)
-│   ├── analygo/                        ← → analygo/*/.pi/skills (per-skill chezmoi symlinks)
-│   └── hamza-workspace/                ← → hamza-workspace/*/.pi/skills
-├── agents-templates/                   ← AGENTS.md files by workspace
-├── system-templates/                   ← SYSTEM.md prompt replacements
-├── AGENTS.md                           ← root context — factory persona
-└── .pi/APPEND_SYSTEM.md                ← project guardrails
+agent-kit/
+├── skills-templates/           ← all skill definitions
+│   ├── global/                 ← → ~/.pi/agent/skills (dir-level symlink)
+│   ├── analygo/                ← → $workspace/.pi/skills (sprout-skills fan-out)
+│   └── hamza-workspace/        ← → $workspace/.pi/skills
+├── agents-templates/           ← AGENTS.md files by workspace
+├── system-templates/           ← SYSTEM.md prompt replacements
+├── scripts/
+│   ├── sprout-skills.sh        ← Symlink fan-out engine (standalone)
+│   ├── audit-skills.sh         ← SKILL.md quality check
+│   └── sync-global-skills.sh   ← Legacy global sync (deprecated by sprout-skills)
+├── AGENTS.md                   ← Root context — factory persona
+└── .pi/APPEND_SYSTEM.md        ← Project guardrails
 ```
 
-```
-~/.pi/agent/skills → agent-kit/skills-templates/global    ← directory symlink (chezmoi)
-```
+### Distribution model
 
-| Consumer `.pi/skills/` | Skills | Symlink → |
+Skills are **authored in agent-kit** and **fanned out** via `sprout-skills.sh`:
+
+| Consumer `.pi/skills/` | Source | Symlink → |
 |---|---|---|
-| `analygo/apps/.pi/skills` | 6 | `agent-kit/analygo/apps/<name>/<name>/` |
-| `analygo/packages/hatchet/.pi/skills` | 11 | `agent-kit/analygo/hatchet/<name>/<name>/` |
-| `analygo/packages/ui/.pi/skills` | 10 | `agent-kit/analygo/ui/<name>/<name>/` |
-| `analygo/packages/contracts/.pi/skills` | 2 | `agent-kit/analygo/contracts/<name>/<name>/` |
-| `hamza-workspace/.pi/skills` | 5 | `agent-kit/hamza-workspace/root/<name>/` |
-| `hamza-workspace/strategy/.pi/skills` | 1 | `agent-kit/hamza-workspace/strategy/<name>/` |
+| `~/.pi/agent/skills` | `global/` | Dir-level symlink (maintained by sprout-skills) |
+| `analygo/packages/hatchet/.pi/skills` | `analygo/hatchet/` | 11 skills |
+| `analygo/packages/ui/.pi/skills` | `analygo/ui/` | 10 skills |
+| `analygo/packages/contracts/.pi/skills` | `analygo/contracts/` | 1 skill |
+| `analygo/packages/aegis/.pi/skills` | `analygo/aegis/` | 1 skill |
+| `analygo/apps/.pi/skills` | `analygo/apps/` | 6 skills |
+| `analygo/.pi/skills` | `analygo/root/` | 5 skills |
+| `hamza-workspace/.pi/skills` | `hamza-workspace/root/` | 5 skills |
+| `hamza-workspace/strategy/.pi/skills` | `hamza-workspace/strategy/` | 1 skill |
 
-## Chezmoi State Files
+### Bridge to chezmoi
 
-Each consumer `.pi/skills/<name>` symlink is tracked as a chezmoi state file under
-`~/hamza-workspace/chezmoi/`. The state file contains the symlink target path.
+The **only** connection to Chef (Cluster 1) is:
 
-### Chezmoi file → target mapping
+```
+chezmoi/run_onchange_after_sprout-skills.sh.tmpl
+  ↳ calls agent-kit/scripts/sprout-skills.sh --apply
+```
 
-| Chezmoi state file | Creates symlink |
-|---|---|
-| `dot_pi/agent/symlink_skills` | `~/.pi/agent/skills` → global/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_autumn-catalog` | `analygo/apps/.pi/skills/autumn-catalog` → apps/autumn-catalog/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_autumn-concepts` | `analygo/apps/.pi/skills/autumn-concepts` → apps/autumn-concepts/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_autumn-integrate` | `analygo/apps/.pi/skills/autumn-integrate` → apps/autumn-integrate/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_autumn-setup` | `analygo/apps/.pi/skills/autumn-setup` → apps/autumn-setup/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_sk-platform-nav` | `analygo/apps/.pi/skills/sk-platform-nav` → apps/sk-platform-nav/ |
-| `Projects/analygo/apps/dot_pi/skills/symlink_sk-route-consolidation` | `analygo/apps/.pi/skills/sk-route-consolidation` → apps/sk-route-consolidation/ |
-| `Projects/analygo/packages/hatchet/dot_pi/skills/symlink_sk-hatchet-*` | `analygo/packages/hatchet/.pi/skills/sk-hatchet-*` → hatchet/sk-hatchet-*/ |
-| `Projects/analygo/packages/ui/dot_pi/skills/symlink_*` | `analygo/packages/ui/.pi/skills/*` → ui/*/ |
-| `Projects/analygo/packages/contracts/private_dot_pi/private_skills/symlink_*` | `analygo/packages/contracts/.pi/skills/*` → contracts/*/ |
-| `hamza-workspace/dot_pi/skills/symlink_*` | `hamza-workspace/.pi/skills/*` → root/*/ |
-| `hamza-workspace/strategy/dot_pi/skills/symlink_strat-task-warrior` | `hamza-workspace/strategy/.pi/skills/strat-task-warrior` → strategy/strat-task-warrior/ |
-
-### Chezmoi naming conventions
-
-| Prefix | Meaning | Example | Creates |
-|---|---|---|
-| `dot_` | file/dir prefixed with `.` | `dot_pi/` → `~/.pi/` |
-| `private_` | 0700 permissions | `private_dot_pi/` → `~/.pi/` (private) |
-| `symlink_` | creates a symlink | `symlink_skills` → symlink at `~/.pi/agent/skills` |
-
-All 38 symlink state files are at `~/hamza-workspace/chezmoi/`.
+When you run `just apply` in chezmoi, the `run_onchange_after_` hook triggers
+the fan-out script. No chezmoi state files needed per-skill.
 
 ## Adding a New Skill
 
 ### 1. Author the skill
 
 ```bash
-# Global
+bash scripts/audit-skills.sh   # check current state first
+```
+
+Create the directory:
+```bash
+# Global (always available)
 mkdir -p skills-templates/global/sk-my-skill/{references,assets}
 
 # Analygo (per-package)
-mkdir -p skills-templates/analygo/hatchet/sk-my-skill/sk-my-skill/{references,assets}
+mkdir -p skills-templates/analygo/hatchet/sk-my-skill/{references,assets}
+
+# Analygo (root level — shared skills)
+mkdir -p skills-templates/analygo/root/sk-my-skill/{references,assets}
 
 # Hamza workspace
 mkdir -p skills-templates/hamza-workspace/root/sk-my-skill/{references,assets}
 ```
 
-Write `SKILL.md` in the innermost directory with required frontmatter:
+Write `SKILL.md` with required frontmatter:
 ```yaml
 ---
 name: sk-my-skill
@@ -91,16 +86,14 @@ metadata:
 ---
 ```
 
-### 2. Register the symlink in chezmoi
+### 2. Fan out the symlink
 
 ```bash
-# Global (dir-level symlink, no per-skill needed)
-# ~/.pi/agent/skills already → agent-kit/global/ — new dir appears automatically
-
-# Analygo / hamza (per-skill symlink needed)
-chezmoi add ~/Projects/analygo/packages/hatchet/.pi/skills/sk-my-skill
-chezmoi apply
+bash scripts/sprout-skills.sh --apply
 ```
+
+**No chezmoi edits needed.** Adding a skill = a git commit in agent-kit + running
+sprout-skills. That's it.
 
 ### 3. Update AGENTS.md index
 
@@ -114,38 +107,34 @@ Add the skill to the Skills by Group table in `AGENTS.md`.
 rg -l "sk-old-skill" skills-templates/ agents-templates/
 ```
 
-### 2. Remove source
+### 2. Remove source + fan-out
 
 ```bash
 rm -rf skills-templates/global/sk-old-skill
+bash scripts/sprout-skills.sh --prune    # cleans broken symlinks
+bash scripts/sprout-skills.sh --apply    # refreshes everything
 ```
 
-### 3. Remove chezmoi state
-
-```bash
-chezmoi purge ~/Projects/analygo/packages/hatchet/.pi/skills/sk-old-skill
-chezmoi apply
-```
-
-### 4. Remove from AGENTS.md
+### 3. Remove from AGENTS.md
 
 ## Commands
 
 ```bash
 # Authoring
 mkdir -p skills-templates/analygo/hatchet/sk-my-skill/sk-my-skill/references
+mkdir -p skills-templates/analygo/hatchet/sk-my-skill/{references,assets}
 
-# State management
-chezmoi add ~/.pi/agent/skills                                                  # track new symlink
-chezmoi add ~/Projects/analygo/packages/hatchet/.pi/skills/sk-my-skill          # track per-skill symlink
-chezmoi diff                                                                    # preview pending changes
-chezmoi apply                                                                  # apply state to filesystem
-chezmoi purge ~/Projects/analygo/packages/hatchet/.pi/skills/sk-old-skill       # remove tracked state
+# Fan-out
+bash scripts/sprout-skills.sh --apply    # write/update all symlinks
+bash scripts/sprout-skills.sh --prune    # remove broken links
+bash scripts/sprout-skills.sh            # dry-run (default)
 
-# Verification
-chezmoi status ~/Projects/analygo/packages/hatchet/.pi/skills/                  # is it managed?
-ls -la ~/.pi/agent/skills/                                                      # global skills
-find ~/hamza-workspace/chezmoi -name "symlink_*" -type f | wc -l               # count managed symlinks
+# Quality
+bash scripts/audit-skills.sh
+
+# Verify
+readlink ~/Projects/analygo/packages/hatchet/.pi/skills/sk-hatchet-test-new
+readlink ~/.pi/agent/skills
 ```
 
 ## Skill Anatomy
@@ -159,13 +148,28 @@ sk-my-skill/
 └── evals/             # Optional — evaluation cases
 ```
 
+### SKILL.md frontmatter
+
+```yaml
+---
+name: sk-my-skill
+description: >
+  Use when... NOT for...
+license: MIT
+metadata:
+  author: hamza
+  version: 1.0.0
+---
+```
+
 ## Layout Rules
 
 - `skills-templates/` named with `-templates` suffix to prevent harness auto-scanning
-- Global skills: flat structure (`global/sk-name/SKILL.md`)
-- Analygo skills: double-nested (`analygo/<pkg>/sk-name/sk-name/SKILL.md`)
-- Hamza skills: flat structure (`hamza/<area>/sk-name/SKILL.md`)
-- No YAML frontmatter in AGENTS.md or .pi/APPEND_SYSTEM.md (plain Markdown only)
+- Some skills (hatchet, ui, apps, contracts) use **double nesting**:
+  `sk-name/sk-name/SKILL.md` — inner dir is the real skill root
+- Other skills (root, global, hamza) are **flat**: `sk-name/SKILL.md`
+- `sprout-skills.sh` auto-detects: if a same-named subdir exists, symlinks to it
+- No YAML frontmatter in `AGENTS.md` or `.pi/APPEND_SYSTEM.md` (plain Markdown only)
 - `sk-` prefix for skill directories
 - `<workspace>.AGENTS.md` for agent template files
 
@@ -174,8 +178,15 @@ sk-my-skill/
 | Group | Count |
 |---|---|
 | Global skills | 11 |
-| Analygo skills | 30 |
+| Analygo skills | 33 |
 | Hamza skills | 6 |
 | Agent templates | 11 |
 | System templates | 1 |
-| **Chezmoi symlink states** | **38** |
+
+## Related
+
+- `~/ops/mac-hardening` — Cluster 4 (independent git repo)
+- `~/notes` — Cluster 3 (plans, scratch)
+- `~/hamza-workspace/chezmoi` — Cluster 1 (dotfiles)
+
+See `scripts/README.md` for the full 4-cluster migration map.
